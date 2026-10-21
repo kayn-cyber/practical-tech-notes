@@ -1,21 +1,23 @@
-# 技术实践笔记 · Practical Tech Notes
+# Practical Tech Notes
 
-分享软件搭建、问题排查、配置调试和迁移中的实践经验，记录可复现的步骤、踩坑原因与验收方法。
+English | [简体中文](README.zh-CN.md)
 
-## 文档目录
+Practical lessons from software setup, troubleshooting, configuration, and migration, with reproducible steps, explanations of pitfalls, and acceptance checks.
 
-| 主题 | 内容 |
-|---|---|
-| [Windows QQ AI 机器人：从接通到迁移](docs/windows-qq-ai-bot.md) | AstrBot、NapCat / SnowLuma、OneBot、人格与陪伴插件、图库、故障排查及迁移验收 |
+## Guides
 
-## 阅读说明
+| Topic | Coverage | Languages |
+|---|---|---|
+| Building a QQ AI Bot on Windows: From First Connection to Migration | AstrBot, NapCat / SnowLuma, OneBot, personas and companion plugins, reaction images, troubleshooting, and migration checks | [English](docs/windows-qq-ai-bot.md) · [简体中文](docs/windows-qq-ai-bot.zh-CN.md) |
 
-- 每篇文档注明适用环境或记录时间，区分已验证结果与待验证事项。
-- 示例参数需按自己的环境调整，版本记录不代表最新版本或通用兼容保证。
-- 反馈问题时请提供脱敏后的现象、版本与复现步骤。
+## Reading these notes
 
-## 隐私与分享原则
+- Each guide states its environment or recording period and distinguishes verified results from items that still need testing.
+- Adapt example settings to your environment. Recorded versions are not claims about the latest release or universal compatibility.
+- When reporting an issue, provide anonymized symptoms, versions, and reproduction steps.
 
-这里只收录经过脱敏的经验文档与示例，不上传真实账号、联系人、个人路径、聊天记录、用户画像、登录态、密钥或原始运行配置。
+## Privacy and sharing
 
-提交截图、日志和附件前也应检查隐藏信息；请勿在 Issue 中粘贴凭据或个人数据。
+This repository contains anonymized guides and examples. Do not upload real account identifiers, contacts, personal paths, conversations, user profiles, login sessions, secrets, or original runtime configurations.
+
+Check screenshots, logs, and attachments for hidden information before submitting them. Do not paste credentials or personal data into issues.
