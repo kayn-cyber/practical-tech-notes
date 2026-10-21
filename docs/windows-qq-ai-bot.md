@@ -1,155 +1,157 @@
-# Windows QQ AI 机器人搭建经验：从接通到迁移
+# Building a QQ AI Bot on Windows: From First Connection to Migration
 
-这份经验稿根据一次本地搭建记录整理，记录截止于 2026 年 10 月。账号、个人称呼、设备用户名、真实路径和私有配置均不包含在本文中。文中参数用于说明这次部署，不代表其他版本的默认值或最新推荐。
+English | [简体中文](windows-qq-ai-bot.zh-CN.md)
 
-## 一、先理解链路，再逐层验收
+These notes summarize one local deployment, recorded through October 2026. Account identifiers, personal nicknames, device usernames, actual local paths, and private configuration are omitted. Settings describe that deployment and are not defaults or recommendations for other versions.
 
-本次使用的链路是：
+## 1. Understand the pipeline and test each layer
+
+The deployment used this pipeline:
 
 ```text
-QQ → 接入端（NapCat 或 SnowLuma，选择一个）
-   → OneBot v11 反向 WebSocket → AstrBot → 模型 API
+QQ → Adapter runtime (choose NapCat or SnowLuma)
+   → OneBot v11 reverse WebSocket → AstrBot → Model API
 ```
 
-每层负责不同事情：QQ 提供账号登录和消息入口；接入端转换消息；AstrBot 管理适配器、模型、人格和插件；模型服务生成回答。
+QQ provides account login and messaging. The adapter runtime translates messages. AstrBot manages platform adapters, models, personas, and plugins. The model service generates responses.
 
-最有用的经验是分层测试。WebSocket 已连接，只说明协议连接建立；命令能回复，才说明消息收发链路可用；普通聊天能回复，才进一步说明模型调用链路可用。插件、图片、群权限仍要分别测试。
+Test each layer separately. A connected WebSocket confirms only the protocol connection. A command response confirms message transport. A normal chat response also checks model invocation. Plugins, images, and group permissions need separate tests.
 
-## 二、安装时保留一套可复现的材料
+## 2. Keep the materials needed to reproduce the setup
 
-这次记录中的组件版本为 AstrBot 4.29.1、Python 3.12、NapCat 4.18.38、SnowLuma 2.0.3 和 Private Companion 6.5.6。它们是当次环境记录，不能据此保证其他 QQ 版本或未来版本兼容。
+Recorded versions were AstrBot 4.29.1, Python 3.12, NapCat 4.18.38, SnowLuma 2.0.3, and Private Companion 6.5.6. This version record does not guarantee compatibility with other QQ builds or future releases.
 
-建议按以下顺序搭建：
+A useful setup order is:
 
-1. 建立独立项目目录，分开放置安装包、程序、运行数据和脚本。
-2. 准备 Python 环境、AstrBot 源码和对应版本的管理面板。
-3. 安装依赖，保存依赖版本快照和实际使用的安装包。
-4. 选择一个 QQ 接入端，完成账号登录和 OneBot 连接。
-5. 配置模型服务，确认命令与普通聊天均能回复。
-6. 最后增加人格、陪伴插件、分段回复和图库。
+1. Create a dedicated project directory with separate locations for installers, programs, runtime data, and scripts.
+2. Prepare Python, the AstrBot source, and a matching dashboard release.
+3. Install dependencies and retain a dependency version snapshot and the actual installation packages.
+4. Choose one QQ adapter runtime and establish account login and the OneBot connection.
+5. Configure the model service and verify both commands and ordinary chat.
+6. Add personas, companion features, split replies, and the reaction image library afterward.
 
-源码显示的版本号不一定能精确标识下载内容。例如某天下载的主分支源码，不能直接视为与同版本发布标签完全相同。需要复现时，保留实际使用的源码包、提交信息和依赖快照。
+A version string does not necessarily identify the exact source contents. A main-branch snapshot downloaded on a particular day may differ from a release tag with the same displayed version. Keep the actual source archive, commit information, and dependency snapshot when reproducibility matters.
 
-下载文件的本地 SHA256 可以帮助检查后续复制是否一致，但不能代替发布方签名或可信来源验证。
+A locally recorded SHA256 helps detect changes during later copying. It does not replace a publisher signature or verification of the download source.
 
-## 三、OneBot 连接的关键配置
+## 3. Key OneBot settings
 
-以下为同一台电脑部署的示例，所有值都应在自己的环境中核对：
+These examples assume both services run on the same computer. Check every value in your environment.
 
-| 项目 | 示例或要求 |
+| Setting | Example or requirement |
 |---|---|
-| 连接方式 | 接入端作为 WebSocket 客户端，连接 AstrBot |
-| 反向地址 | `ws://127.0.0.1:6199/ws` |
-| 消息格式 | Array |
-| 通信 Token | 两端填写同一个自行生成的密钥 |
-| 心跳／重连 | 本次使用 5000 ms |
-| AstrBot 适配器 | OneBot v11，对应本次的 `aiocqhttp` 类型 |
+| Connection direction | The adapter runtime connects to AstrBot as a WebSocket client |
+| Reverse WebSocket URL | `ws://127.0.0.1:6199/ws` |
+| Message format | Array |
+| Communication token | Use the same self-generated secret at both ends |
+| Heartbeat / reconnect interval | 5000 ms in this deployment |
+| AstrBot adapter | OneBot v11, using the `aiocqhttp` type in this deployment |
 
-面板登录凭据、OneBot 通信 Token 和模型 API Key 是三种不同凭据，不能混用。
+Dashboard credentials, the OneBot communication token, and the model API key are separate credentials and are not interchangeable.
 
-本次面板端口分别为 AstrBot 6185、NapCat 6099、SnowLuma 5099。端口号用于区分服务；访问方式和登录要求以安装版本为准。同机部署可使用回环地址，跨设备或容器部署必须重新核对地址、鉴权和网络访问范围。
+Dashboard ports in this setup were 6185 for AstrBot, 6099 for NapCat, and 5099 for SnowLuma. Access methods and authentication depend on the installed version. Loopback addresses work for a single computer; deployments across devices or containers require a fresh review of addresses, authentication, and network exposure.
 
-管理员账号与会话白名单也要区分。管理员身份不等于允许某个会话访问；私聊会话规则应使用对应版本提供的完整会话 ID。本次版本中空白名单表示不限制，配置后务必用允许和未允许的测试会话分别验收。
+Administrator accounts and session allowlists also serve different purposes. Administrator status does not itself authorize a session. Private-chat rules should use the complete session ID supplied by the installed version. In the recorded version, an empty allowlist imposed no restriction. Test both allowed and disallowed sessions after configuration.
 
-## 四、遇到问题时，按现象缩小范围
+## 4. Troubleshoot by symptom
 
-| 现象 | 本次经验与排查顺序 |
+| Symptom | Checks informed by this deployment |
 |---|---|
-| WebSocket 连接被拒绝 | 先确认 AstrBot 运行、监听端口及地址；检查是否残留旧连接地址 |
-| WebSocket 返回 403 | 优先检查两端通信 Token 是否一致 |
-| `/help` 有回复，普通聊天没回复 | 检查 AI 总开关、模型选择、会话权限，再看模型调用日志 |
-| 模型列表或调用提示连接错误 | 检查启动环境的联网权限与网络连通性，再核对密钥和服务地址；不能仅凭此错误认定密钥无效 |
-| 人格表现与设定不符 | 检查当前会话人格、旧上下文以及插件动态注入 |
-| 插件开关已开却没有效果 | 检查目标用户、授权、素材、依赖服务和实际触发条件 |
-| 面板在线但没有消息 | 用测试消息验证真实收发，并比对接入端和 AstrBot 的事件时间 |
+| WebSocket connection refused | Check that AstrBot is running, confirm its listening address and port, and remove stale connection URLs |
+| WebSocket returns 403 | First compare the communication tokens at both ends |
+| `/help` works but normal chat does not | Check the global AI switch, selected model, and session permissions, then inspect model invocation logs |
+| Model listing or invocation reports a connection error | Check network access in the launch environment, then credentials and the service URL; this error alone does not prove the key is invalid |
+| Persona behavior differs from expectations | Check the current session persona, previous context, and dynamic plugin injections |
+| A plugin is enabled but has no effect | Check the target user, authorization, assets, required services, and trigger conditions |
+| Dashboard is online but messages do not arrive | Send a test message and compare actual event timestamps in the adapter runtime and AstrBot |
 
-每次只改一个层面的配置，再做对应测试，能更容易判断改变是否有效。
+Change one layer at a time and run the corresponding test so that the effect remains traceable.
 
-## 五、切换接入端时，要验证真正独立运行
+## 5. Verify independence when switching adapter runtimes
 
-本次从 NapCat 切换到 SnowLuma 时，曾接入由 NapCat 启动的 QQ。关闭 NapCat 后，这个 QQ 也退出，导致新的接入路线随之断开。
+During the switch from NapCat to SnowLuma, SnowLuma initially attached to a QQ instance launched by NapCat. Stopping NapCat also closed that QQ instance, breaking the new route.
 
-解决方式是退出原机器人接入端及其 QQ，再通过普通桌面 QQ 登录机器人账号，手动选择正确进程接入 SnowLuma。需要避免选中其他个人 QQ 进程。
+The solution was to stop the original runtime and its QQ instance, log the bot account into the normal desktop QQ client, and manually select that process in SnowLuma. Avoid selecting another personal QQ process.
 
-切换流程：
+Switching procedure:
 
-1. 停止旧接入端和它对应的机器人 QQ。
-2. 用普通桌面 QQ 登录机器人账号。
-3. 启动新接入端，按其界面完成必要设置，手动选择目标进程。
-4. 核对 OneBot 地址、Token、角色和消息格式，不直接照搬另一软件的配置 JSON。
-5. 尽可能沿用 AstrBot 原有平台 ID，并检查会话、白名单与插件资料。
-6. 在旧接入端关闭的状态下测试命令、聊天和图片。
+1. Stop the old runtime and its bot QQ instance.
+2. Log the bot account into the normal desktop QQ client.
+3. Start the new runtime, complete its required setup through its interface, and manually choose the target process.
+4. Check the OneBot URL, token, role, and message format. Do not copy configuration JSON directly from a different runtime.
+5. Keep the existing AstrBot platform ID where possible, and review sessions, allowlists, and plugin data.
+6. Test commands, chat, and images while the old runtime remains stopped.
 
-不要让两个接入端同时处理同一个机器人账号。需要回退时，停止新接入端，退出对应 QQ，再按旧方式启动并重新测试。
+Do not let two runtimes handle the same bot account simultaneously. To roll back, stop the new runtime, exit its QQ instance, restart through the old route, and retest.
 
-这次记录确认了 SnowLuma 通过普通桌面 QQ 独立收发可用，但没有足够持续运行数据证明它比另一条路线更稳定。长期稳定性、GIF 和群权限应分别验收。
+Independent messaging through SnowLuma and normal desktop QQ was confirmed in this deployment. There was insufficient continuous runtime evidence to establish greater stability than the other route. Long-term stability, GIFs, and group permissions need separate validation.
 
-## 六、人格、陪伴状态与长期记忆要分别配置
+## 6. Configure personas, companion state, and long-term memory separately
 
-本次调试发现，聊天风格不仅由人格文本决定，还会受到旧会话上下文、生活状态、情绪状态和表达学习等插件功能影响。
+Chat style was influenced by persona text, previous conversation context, and plugin features such as daily state, emotional state, and expression learning.
 
-调试时先确认基础人格生效，再逐项开启动态功能。为了稳定风格，本次暂停了部分被动状态注入与表达学习；这属于一次具体调试选择，不是通用最优配置。
+First verify the base persona, then enable dynamic features individually. Some passive state injections and expression learning were paused to stabilize the style in this deployment. That was a specific debugging choice, not a universal best configuration.
 
-还需要注意：
+Other lessons:
 
-- 保存一份人格 Markdown，不代表运行时人格已经更新，仍需通过面板导入或编辑。
-- 新开会话可以排除旧上下文影响，但不能据此判断长期记忆已被删除。
-- 陪伴插件的用户画像、关系资料与完整长期记忆系统不是同一功能。
-- 本次没有完成长期记忆核心或 Embedding 服务安装，因此不能把它们列为已验证能力。
+- Saving a persona Markdown file does not update the runtime persona automatically; import or edit it through the dashboard.
+- Starting a new conversation can remove the influence of old context, but does not prove that long-term memory has been deleted.
+- Companion profiles and relationship data are distinct from a complete long-term memory system.
+- Installation of the long-term memory core and embedding service was not completed here, so those capabilities were not verified.
 
-## 七、图库先做小规模闭环
+## 7. Validate a small reaction image library first
 
-图片放进文件夹后，不会自动成为插件可检索的图库。还需要通过支持的导入方式建立元数据和索引。
+Copying images into a directory does not automatically make them searchable by the plugin. Use a supported import method to create metadata and indexes.
 
-可以先准备少量来源与使用权限明确的图片，为每张填写名称、标签、情绪、用途、描述和可见文字。没有文字就留空，不编造 OCR 结果。情绪和用途也应区分：安慰用户不一定需要一张哭泣的图片。
+Start with a small set of images whose sources and usage rights are clear. Record a name, tags, emotions, intended use, description, and visible text for each image. Leave absent text blank and do not invent OCR results. Distinguish the image's emotion from its purpose: comforting a user does not necessarily call for a crying image.
 
-先测试明确要求发图，再测试日常语境自动选图。自动触发的概率、冷却、重复限制和特殊语义规则都会影响结果，连续几次不发图不一定代表功能失效。
+Test explicit image requests before automatic selection in ordinary conversation. Trigger probability, cooldowns, repetition limits, and special semantic rules can all affect the result. Several consecutive messages without an image do not necessarily indicate a failure.
 
-这次后续记录表明，小图库已通过插件方法导入，并在 NapCat 路线上确认过一次语境匹配和发图。早期计划中“素材尚未导入”的描述已经过时；SnowLuma 的自动发图和 GIF 仍需独立测试。具体概率与冷却值应按自己的体验调整。
+Later records confirmed a small library imported through plugin methods and one successful contextual match and image send on the NapCat route. The earlier plan saying assets had not been imported was outdated. Automatic images and GIFs on SnowLuma still required separate tests. Tune probability and cooldown values for your own usage.
 
-关键词和标签匹配可先完成基本闭环。只有确认需要语义检索后，再配置独立的 Embedding 服务；聊天模型不能直接当作嵌入模型使用。
+Keyword and tag matching can establish the basic workflow. Configure a separate embedding service only after confirming a need for semantic retrieval. A chat model cannot simply substitute for an embedding model.
 
-本次还遇到过模型把工具调用输出成普通文本的兼容问题。局部补丁解决过该场景，但属于特定版本改动；核心或插件更新后，应重新检查补丁与命令别名是否仍适用。
+A compatibility issue also caused the model to emit a tool call as ordinary text. A local patch addressed that scenario for the installed version. Recheck that patch and command aliases after core or plugin updates.
 
-## 八、个人迁移与公开分享，采用不同材料
+## 8. Use different materials for migration and public sharing
 
-个人迁移需要完整保留运行数据；公开分享只提供脱敏说明和自行制作的示例配置。
+Personal migration requires complete runtime data. Public sharing should contain anonymized explanations and purpose-built example configurations.
 
-迁移时先正常停止服务，再备份完整数据目录。SQLite 使用 WAL 时，运行中只复制单个 `.db` 文件可能遗漏数据；可在停机后完整复制，或使用 SQLite 在线备份接口。
+Stop services normally before backing up the entire data directory. With SQLite WAL enabled, copying only a running database's `.db` file may omit data. Copy the complete directory after shutdown, or use SQLite's online backup interface.
 
-跨路径复制的 Python 虚拟环境不保证可用。新电脑应按保存的 Python 版本和依赖快照重建环境，随后检查配置、图库中的绝对路径。QQ 登录态和进程 ID 不能当成可直接迁移的可靠材料，新机器应重新登录并选择进程。
+A Python virtual environment copied to another path may not work. Rebuild it on the new computer using the recorded Python version and dependency snapshot, then check absolute paths in configuration and image libraries. QQ login state and process IDs are not reliable portable setup materials; log in again and select the process on the new machine.
 
-公开分享时，不附带以下内容：
+Exclude the following from public materials:
 
-- API Key、通信 Token、面板密码、登录二维码和登录态。
-- 真实账号、个人称呼、联系人、群信息和用户设备路径。
-- 聊天数据库、用户画像、关系记录、日记、记忆数据和图库私有元数据。
-- 原始日志、截图、历史配置备份、崩溃转储和未经检查的脚本或压缩包。
+- API keys, communication tokens, dashboard passwords, login QR codes, and session credentials.
+- Real account identifiers, personal nicknames, contacts, group information, and device paths.
+- Chat databases, user profiles, relationship records, diaries, memory data, and private image metadata.
+- Raw logs, screenshots, old configuration backups, crash dumps, and unreviewed scripts or archives.
 
-历史备份也可能保留旧密钥和对话。Git 忽略规则只能减少误提交，不能证明仓库、历史提交或手动打包内容已经脱敏。本文为独立分享稿，不应附上整个项目目录。
+Old backups may retain previous keys and conversations. Git ignore rules reduce accidental commits but do not establish that a repository, its history, or a manually assembled archive is anonymized. Share this standalone guide without attaching the full project directory.
 
-## 九、交付前的最小验收
+## 9. Minimum acceptance checks
 
-| 测试 | 通过标准 |
+| Test | Passing condition |
 |---|---|
-| 命令 | 测试账号发送 `/help` 后正常回复 |
-| 模型 | 普通提问有回复，日志无对应调用错误 |
-| 访问控制 | 允许的会话可用，未允许的会话被正确限制 |
-| 人格 | 新会话采用预期人格，插件影响可解释 |
-| 图库 | 显式发图成功，自动选图符合语境和冷却要求 |
-| 重启 | 配置、素材与插件资料仍可使用 |
-| 切换 | 旧接入端关闭后，新路线仍能独立收发 |
-| 稳定性 | 连续观察并记录掉线、QQ 在线状态和恢复过程 |
+| Commands | A test account receives a normal response to `/help` |
+| Model | Ordinary questions receive replies without corresponding model invocation errors |
+| Access control | Allowed sessions work and disallowed sessions are correctly restricted |
+| Persona | New conversations use the intended persona and plugin effects are understood |
+| Image library | Explicit requests work, and automatic selection follows context and cooldown rules |
+| Restart | Configuration, assets, and plugin data remain usable |
+| Runtime switch | The new route still sends and receives while the old runtime is stopped |
+| Stability | Observe continuously and record disconnections, QQ status, and recovery steps |
 
-一次文字回复成功，只能证明当时那条链路可用。迁移到另一台机器、长时间运行以及图片和群功能，都应留下各自的验收结果。
+One successful text reply proves only that the tested path worked at that moment. Keep separate results for another-machine migration, sustained operation, images, and group features.
 
-## 参考入口
+## References
 
-以下是原搭建记录所引用的项目入口，具体安装要求以所用版本的说明为准；本文未重新核验链接和最新版本。
+These are project entry points cited in the original deployment notes. Follow the documentation for your installed version. Links and latest releases were not reverified for this guide.
 
 - [AstrBot](https://github.com/AstrBotDevs/AstrBot)
-- [NapCat Windows Shell 安装说明](https://napneko.github.io/guide/boot/Shell)
+- [NapCat Windows Shell setup](https://napneko.github.io/guide/boot/Shell)
 - [SnowLuma](https://github.com/SnowLuma/SnowLuma)
 - [Private Companion](https://github.com/menglimi/astrbot_plugin_private_companion)
-- [uv Python 环境管理](https://docs.astral.sh/uv/guides/install-python/)
-- [DeepSeek API 文档](https://api-docs.deepseek.com/)
+- [uv Python environment management](https://docs.astral.sh/uv/guides/install-python/)
+- [DeepSeek API documentation](https://api-docs.deepseek.com/)
